@@ -44,7 +44,7 @@
 (define-data-var price-oracle principal tx-sender)
 (define-data-var total-supply uint u0)
 (define-data-var btc-price uint u0)
-(define-data-var last-price-update uint block-height)
+(define-data-var last-price-update uint stacks-block-height)
 
 ;; Data Maps
 ;; Stores user positions including collateral amount, debt, and last update block
@@ -93,7 +93,7 @@
 ;; Private helper functions
 ;; Ensures price data hasn't expired based on PRICE-VALIDITY-PERIOD
 (define-private (check-price-freshness)
-  (if (< (- block-height (var-get last-price-update)) PRICE-VALIDITY-PERIOD)
+  (if (< (- stacks-block-height (var-get last-price-update)) PRICE-VALIDITY-PERIOD)
     (ok true)
     ERR-PRICE-EXPIRED
   )
@@ -135,7 +135,7 @@
     (try! (check-min-collateral amount))
     (let (
       (current-position (default-to
-        { collateral: u0, debt: u0, last-update: block-height }
+        { collateral: u0, debt: u0, last-update: stacks-block-height }
         (get-position tx-sender)
       ))
       (new-collateral (+ amount (get collateral current-position)))
@@ -145,7 +145,7 @@
         {
           collateral: new-collateral,
           debt: (get debt current-position),
-          last-update: block-height
+          last-update: stacks-block-height
         }
       )
       (ok true))
@@ -171,7 +171,7 @@
         {
           collateral: (get collateral current-position),
           debt: new-debt,
-          last-update: block-height
+          last-update: stacks-block-height
         }
       )
       (var-set total-supply (+ (var-get total-supply) amount))
@@ -192,7 +192,7 @@
         {
           collateral: (get collateral current-position),
           debt: (- (get debt current-position) amount),
-          last-update: block-height
+          last-update: stacks-block-height
         }
       )
       (var-set total-supply (- (var-get total-supply) amount))
@@ -215,7 +215,7 @@
         {
           collateral: (- (get collateral current-position) amount),
           debt: (get debt current-position),
-          last-update: block-height
+          last-update: stacks-block-height
         }
       )
       (try! (check-position-health tx-sender))
@@ -238,7 +238,7 @@
       ;; Record liquidation event
       (map-set liquidation-history user
         {
-          timestamp: block-height,
+          timestamp: stacks-block-height,
           collateral-liquidated: (get collateral position),
           debt-repaid: (get debt position)
         }
@@ -249,7 +249,7 @@
         {
           collateral: u0,
           debt: u0,
-          last-update: block-height
+          last-update: stacks-block-height
         }
       )
       
@@ -265,7 +265,7 @@
     (asserts! (is-eq tx-sender (var-get price-oracle)) ERR-NOT-AUTHORIZED)
     (asserts! (and (> new-price u0) (<= new-price MAX-PRICE)) ERR-INVALID-AMOUNT)
     (var-set btc-price new-price)
-    (var-set last-price-update block-height)
+    (var-set last-price-update stacks-block-height)
     (ok true))
 )
 
