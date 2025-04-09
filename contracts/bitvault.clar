@@ -107,3 +107,47 @@
     (ok true)
   )
 )
+
+(define-private (check-min-collateral (amount uint))
+  (begin
+    (try! (validate-amount amount))
+    (if (>= amount MIN-DEPOSIT)
+      (ok true)
+      ERR-BELOW-MINIMUM)
+  )
+)
+
+;; Verifies position maintains required collateralization ratio
+(define-private (check-position-health (user principal))
+  (let (
+    (ratio (unwrap! (get-collateral-ratio user) (err u0)))
+  )
+    (if (< ratio MIN-COLLATERAL-RATIO)
+      ERR-INSUFFICIENT-COLLATERAL
+      (ok true))
+  )
+)
+
+;; Public functions for user interactions
+;; Allows users to deposit BTC collateral to create or increase their position
+(define-public (deposit-collateral (amount uint))
+  (begin
+    (try! (check-min-collateral amount))
+    (let (
+      (current-position (default-to
+        { collateral: u0, debt: u0, last-update: block-height }
+        (get-position tx-sender)
+      ))
+      (new-collateral (+ amount (get collateral current-position)))
+    )
+      (asserts! (<= new-collateral MAX-DEPOSIT) ERR-MAX-AMOUNT-EXCEEDED)
+      (map-set user-positions tx-sender
+        {
+          collateral: new-collateral,
+          debt: (get debt current-position),
+          last-update: block-height
+        }
+      )
+      (ok true))
+  )
+)
