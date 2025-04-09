@@ -66,3 +66,44 @@
     debt-repaid: uint
   }
 )
+
+;; Read-only functions
+(define-read-only (get-position (user principal))
+  (map-get? user-positions user)
+)
+
+;; Calculates the current collateralization ratio for a user's position
+;; Returns the ratio as a percentage (e.g., 150 = 150%)
+(define-read-only (get-collateral-ratio (user principal))
+  (let (
+    (position (unwrap! (get-position user) (err u0)))
+    (collateral-value (* (get collateral position) (var-get btc-price)))
+    (debt-value (* (get debt position) u100000000))
+  )
+    (if (is-eq (get debt position) u0)
+      (ok u0)
+      (ok (/ (* collateral-value u100) debt-value)))
+  )
+)
+
+(define-read-only (get-current-price)
+  (ok (var-get btc-price))
+)
+
+;; Private helper functions
+;; Ensures price data hasn't expired based on PRICE-VALIDITY-PERIOD
+(define-private (check-price-freshness)
+  (if (< (- block-height (var-get last-price-update)) PRICE-VALIDITY-PERIOD)
+    (ok true)
+    ERR-PRICE-EXPIRED
+  )
+)
+
+;; Validates amount is within acceptable bounds
+(define-private (validate-amount (amount uint))
+  (begin
+    (asserts! (> amount u0) ERR-ZERO-AMOUNT)
+    (asserts! (<= amount MAX-DEPOSIT) ERR-MAX-AMOUNT-EXCEEDED)
+    (ok true)
+  )
+)
