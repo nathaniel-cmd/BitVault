@@ -200,3 +200,80 @@
     )
   )
 )
+
+;; Enables withdrawal of excess collateral
+;; Ensures position remains properly collateralized after withdrawal
+(define-public (withdraw-collateral (amount uint))
+  (begin
+    (try! (validate-amount amount))
+    (let (
+      (current-position (unwrap! (get-position tx-sender) ERR-POSITION-NOT-FOUND))
+    )
+      (asserts! (>= (get collateral current-position) amount) ERR-INVALID-AMOUNT)
+
+      (map-set user-positions tx-sender
+        {
+          collateral: (- (get collateral current-position) amount),
+          debt: (get debt current-position),
+          last-update: block-height
+        }
+      )
+      (try! (check-position-health tx-sender))
+      (ok true)
+    )
+  )
+)
+
+;; Liquidation mechanism for undercollateralized positions
+;; Can be triggered by anyone when a position falls below LIQUIDATION-RATIO
+(define-public (liquidate-position (user principal))
+  (begin
+    (try! (check-price-freshness))
+    (let (
+      (position (unwrap! (get-position user) ERR-POSITION-NOT-FOUND))
+      (ratio (unwrap! (get-collateral-ratio user) ERR-POSITION-NOT-FOUND))
+    )
+      (asserts! (< ratio LIQUIDATION-RATIO) ERR-HEALTHY-POSITION)
+
+      ;; Record liquidation event
+      (map-set liquidation-history user
+        {
+          timestamp: block-height,
+          collateral-liquidated: (get collateral position),
+          debt-repaid: (get debt position)
+        }
+      )
+      
+      ;; Clear the liquidated position
+      (map-set user-positions user
+        {
+          collateral: u0,
+          debt: u0,
+          last-update: block-height
+        }
+      )
+      
+      (var-set total-supply (- (var-get total-supply) (get debt position)))
+      (ok true))
+  )
+)
+
+;; Administrative functions
+;; Updates the BTC price, can only be called by authorized price oracle
+(define-public (set-price (new-price uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get price-oracle)) ERR-NOT-AUTHORIZED)
+    (asserts! (and (> new-price u0) (<= new-price MAX-PRICE)) ERR-INVALID-AMOUNT)
+    (var-set btc-price new-price)
+    (var-set last-price-update block-height)
+    (ok true))
+)
+
+;; Updates the price oracle address, can only be called by contract owner
+(define-public (set-price-oracle (new-oracle principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (asserts! (not (is-eq new-oracle (var-get price-oracle))) ERR-INVALID-AMOUNT)
+    (var-set price-oracle new-oracle)
+    (ok true))
+)
